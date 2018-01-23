@@ -1,6 +1,6 @@
 package com.examples.helloguice;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 import javax.inject.Inject;
 
@@ -41,6 +41,26 @@ public class ChildInjectionGuiceLearningTest {
 
 	};
 
+	static class MyOtherClass {
+		private MyInterface field;
+		private MyParam myParam;
+
+		@Inject
+		public MyOtherClass(MyInterface field, MyParam myParam) {
+			this.field = field;
+			this.myParam = myParam;
+		}
+
+		public MyInterface getField() {
+			return field;
+		}
+
+		public MyParam getMyParam() {
+			return myParam;
+		}
+
+	};
+
 	static interface MyInterface {
 
 	}
@@ -59,6 +79,20 @@ public class ChildInjectionGuiceLearningTest {
 			bind(MyInterface.class).to(MyImplementation.class);
 		}
 
+	}
+
+	static class MyParamInjector {
+		@Inject
+		private Injector parentInjector;
+
+		public <T> T getWithMyParam(Class<T> type, MyParam myParam) {
+			return parentInjector.createChildInjector(new AbstractModule() {
+				@Override
+				protected void configure() {
+					bind(MyParam.class).toInstance(myParam);;
+				}
+			}).getInstance(type);
+		}
 	}
 
 	/**
@@ -102,4 +136,18 @@ public class ChildInjectionGuiceLearningTest {
 		parentInjector.getInstance(MyClass.class);
 	}
 
+	/**
+	 * Binds {@link MyParam} in the child injector
+	 */
+	@Test
+	public void testMyParamInjector() {
+		Injector injector = Guice.createInjector(new MyModule());
+		MyParamInjector myParamInjector = injector.getInstance(MyParamInjector.class);
+		MyParam p1 = new MyParamImpl();
+		MyParam p2 = new MyParamImpl();
+		MyClass a1 = myParamInjector.getWithMyParam(MyClass.class, p1);
+		MyOtherClass a2 = myParamInjector.getWithMyParam(MyOtherClass.class, p2);
+		assertSame(p1, a1.getMyParam());
+		assertSame(p2, a2.getMyParam());
+	}
 }
