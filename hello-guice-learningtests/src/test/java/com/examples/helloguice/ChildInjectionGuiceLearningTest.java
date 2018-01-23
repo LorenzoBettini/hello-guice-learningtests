@@ -137,7 +137,7 @@ public class ChildInjectionGuiceLearningTest {
 	}
 
 	/**
-	 * Binds {@link MyParam} in the child injector
+	 * Uses {@link MyParamInjector}
 	 */
 	@Test
 	public void testMyParamInjector() {
