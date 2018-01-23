@@ -1,6 +1,6 @@
 package com.examples.helloguice;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import javax.inject.Inject;
 
@@ -14,7 +14,17 @@ import com.google.inject.assistedinject.FactoryModuleBuilder;
 
 public class AssistedInjectionGuiceLearningTest {
 
-	static class MyClass {
+	static interface MyClassInterface {
+
+		MyInterface getField();
+
+		String getaString();
+
+		int getAnInt();
+
+	}
+
+	static class MyClass implements MyClassInterface {
 		private MyInterface field;
 		private String aString;
 		private int anInt;
@@ -26,21 +36,24 @@ public class AssistedInjectionGuiceLearningTest {
 			this.anInt = anInt;
 		}
 
+		@Override
 		public MyInterface getField() {
 			return field;
 		}
 
+		@Override
 		public String getaString() {
 			return aString;
 		}
 
+		@Override
 		public int getAnInt() {
 			return anInt;
 		}
 	};
 
 	static interface MyClassFactory {
-		public MyClass create(String aString, int anInt);
+		public MyClassInterface create(String aString, int anInt);
 	}
 
 	static interface MyInterface {
@@ -56,7 +69,9 @@ public class AssistedInjectionGuiceLearningTest {
 		@Override
 		protected void configure() {
 			bind(MyInterface.class).to(MyImplementation.class);
-			install(new FactoryModuleBuilder().build(MyClassFactory.class));
+			install(new FactoryModuleBuilder()
+				.implement(MyClassInterface.class, MyClass.class)
+				.build(MyClassFactory.class));
 		}
 
 	}
@@ -65,7 +80,7 @@ public class AssistedInjectionGuiceLearningTest {
 	public void test() {
 		Injector injector = Guice.createInjector(new MyModule());
 		MyClassFactory factory = injector.getInstance(MyClassFactory.class);
-		MyClass a = factory.create("a String", 1);
+		MyClassInterface a = factory.create("a String", 1);
 		assertEquals(MyImplementation.class, a.getField().getClass());
 		assertEquals("a String", a.getaString());
 		assertEquals(1, a.getAnInt());
