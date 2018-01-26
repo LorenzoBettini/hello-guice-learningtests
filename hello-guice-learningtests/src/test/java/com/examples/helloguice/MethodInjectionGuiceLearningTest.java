@@ -22,7 +22,7 @@ public class MethodInjectionGuiceLearningTest {
 		}
 
 		@Inject
-		public void calledAfterConstructor(MyInterface later) {
+		private void calledAfterConstructor(MyInterface later) {
 			this.field.getClass(); // just to make sure it's not null
 			this.later = later;
 		}
