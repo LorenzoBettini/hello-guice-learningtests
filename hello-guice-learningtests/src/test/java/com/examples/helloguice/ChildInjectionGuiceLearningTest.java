@@ -8,6 +8,7 @@ import org.junit.Test;
 
 import com.google.inject.AbstractModule;
 import com.google.inject.ConfigurationException;
+import com.google.inject.CreationException;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 
@@ -110,6 +111,30 @@ public class ChildInjectionGuiceLearningTest {
 	@Test
 	public void testChildInjectorBinding() {
 		Injector injector = Guice.createInjector(new MyModule()).createChildInjector(new AbstractModule() {
+			@Override
+			protected void configure() {
+				bind(MyParam.class).to(MyParamImpl.class);
+			}
+		});
+		MyClass a = injector.getInstance(MyClass.class);
+		assertEquals(MyImplementation.class, a.getField().getClass());
+		assertEquals(MyParamImpl.class, a.getMyParam().getClass());
+	}
+
+	/**
+	 * Fails when creating the first injector (the parent) since MyParam is not bound
+	 */
+	@Test(expected=CreationException.class)
+	public void testChildInjectorBindingWhenMyParamIsNotBoundInTheParentInjector() {
+		Injector injector = Guice.createInjector(
+			new MyModule() {
+				@Override
+				protected void configure() {
+					super.configure();
+					bind(MyClass.class);
+				};
+			}
+		).createChildInjector(new AbstractModule() {
 			@Override
 			protected void configure() {
 				bind(MyParam.class).to(MyParamImpl.class);
