@@ -41,7 +41,7 @@ public class CustomScopeGuiceLearningTest {
 
 	}
 
-	private static class GuiceObjectScope implements Scope {
+	private static class MyScope implements Scope {
 
 		// Make this a ThreadLocal for multithreading.
 		private final ThreadLocal<Deque<MyParam>> stack = new ThreadLocal<Deque<MyParam>>() {
@@ -136,13 +136,13 @@ public class CustomScopeGuiceLearningTest {
 
 		@Override
 		protected void configure() {
-			GuiceObjectScope scope = new GuiceObjectScope();
+			MyScope scope = new MyScope();
 
 			// tell Guice about the scope
 			bindScope(MyScopedAnnotation.class, scope);
 
 			// make our scope instance injectable
-			bind(GuiceObjectScope.class).toInstance(scope);
+			bind(MyScope.class).toInstance(scope);
 
 			bind(MyInterface.class).to(MyImplementation.class);
 		}
@@ -154,7 +154,7 @@ public class CustomScopeGuiceLearningTest {
 		private Injector injector;
 
 		@Inject
-		private GuiceObjectScope scope;
+		private MyScope scope;
 
 		public <T> T create(Class<T> type, MyParam myParam) {
 			scope.enter(myParam);
@@ -165,8 +165,8 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testMyScopeIsSingleton() {
 		Injector injector = Guice.createInjector(new MyModule());
-		GuiceObjectScope scope1 = injector.getInstance(GuiceObjectScope.class);
-		GuiceObjectScope scope2 = injector.getInstance(GuiceObjectScope.class);
+		MyScope scope1 = injector.getInstance(MyScope.class);
+		MyScope scope2 = injector.getInstance(MyScope.class);
 		assertSame(scope1, scope2);
 	}
 
@@ -207,7 +207,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testCanInjectTypeThatUsesMyParamEnteringTheScope() {
 		Injector injector = Guice.createInjector(new MyModule());
-		GuiceObjectScope scope1 = injector.getInstance(GuiceObjectScope.class);
+		MyScope scope1 = injector.getInstance(MyScope.class);
 		MyParam p1 = new MyParam();
 		MyParam p2 = new MyParam();
 		scope1.enter(p1);
@@ -220,7 +220,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testTypesShareSingletons() {
 		Injector injector = Guice.createInjector(new MyModule());
-		GuiceObjectScope scope1 = injector.getInstance(GuiceObjectScope.class);
+		MyScope scope1 = injector.getInstance(MyScope.class);
 		MyParam p1 = new MyParam();
 		MyParam p2 = new MyParam();
 		scope1.enter(p1);
@@ -239,7 +239,7 @@ public class CustomScopeGuiceLearningTest {
 				bind(MyClass.class).to(MyClassCustom.class);
 			}
 		});
-		GuiceObjectScope scope1 = injector.getInstance(GuiceObjectScope.class);
+		MyScope scope1 = injector.getInstance(MyScope.class);
 		MyParam p1 = new MyParam();
 		scope1.enter(p1);
 		MyClass o = injector.getInstance(MyClass.class);
