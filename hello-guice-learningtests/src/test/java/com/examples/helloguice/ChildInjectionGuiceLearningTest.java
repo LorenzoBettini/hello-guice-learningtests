@@ -11,6 +11,7 @@ import com.google.inject.ConfigurationException;
 import com.google.inject.CreationException;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
+import com.google.inject.Singleton;
 
 public class ChildInjectionGuiceLearningTest {
 
@@ -96,6 +97,9 @@ public class ChildInjectionGuiceLearningTest {
 		}
 	}
 
+	@Singleton
+	private static class MySingleton {}
+
 	/**
 	 * Fails since {@link MyParam} is not bound
 	 */
@@ -174,5 +178,38 @@ public class ChildInjectionGuiceLearningTest {
 		MyOtherClass a2 = myParamInjector.getWithMyParam(MyOtherClass.class, p2);
 		assertSame(p1, a1.getMyParam());
 		assertSame(p2, a2.getMyParam());
+	}
+
+	@Test
+	public void testChildInjectorsShareSingletons() {
+		Injector injector = Guice.createInjector(new MyModule());
+		assertSame(
+			injector.createChildInjector().getInstance(MySingleton.class),
+			injector.createChildInjector().getInstance(MySingleton.class)
+		);
+		assertSame(
+			injector.getInstance(MySingleton.class),
+			injector.createChildInjector().getInstance(MySingleton.class)
+		);
+	}
+
+	@Test
+	public void testChildInjectorBindSingletonToInstance() {
+		Injector injector = Guice.createInjector(new MyModule());
+		MySingleton customInstance = new MySingleton();
+		Injector childInjector = injector.createChildInjector(new AbstractModule() {
+			@Override
+			protected void configure() {
+				bind(MySingleton.class).toInstance(customInstance);
+			}
+		});
+		assertNotSame(
+			childInjector.getInstance(MySingleton.class),
+			injector.createChildInjector().getInstance(MySingleton.class)
+		);
+		assertSame(
+			childInjector.getInstance(MySingleton.class),
+			customInstance
+		);
 	}
 }
