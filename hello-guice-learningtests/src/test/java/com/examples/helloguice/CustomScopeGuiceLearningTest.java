@@ -4,15 +4,13 @@ import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 import org.junit.Test;
 
@@ -38,18 +36,22 @@ public class CustomScopeGuiceLearningTest {
 
 	@MyScopedAnnotation
 	private static class MyParam {
+		public int i = 0;
+
+		public MyParam() {
+
+		}
+
+		public MyParam(int i) {
+			this.i = i;
+		}
 
 	}
 
 	private static class MyScope implements Scope {
 
 		// Make this a ThreadLocal for multithreading.
-		private final ThreadLocal<Deque<MyParam>> stack = new ThreadLocal<Deque<MyParam>>() {
-			@Override
-			protected Deque<MyParam> initialValue() {
-				return new ArrayDeque<>();
-			};
-		};
+		private final ThreadLocal<MyParam> params = new ThreadLocal<MyParam>();
 
 		@Override
 		public <T> Provider<T> scope(final Key<T> key, final Provider<T> unscoped) {
@@ -58,7 +60,7 @@ public class CustomScopeGuiceLearningTest {
 				public T get() {
 					if (key.getTypeLiteral().getRawType().equals(MyParam.class)) {
 						@SuppressWarnings("unchecked")
-						T toReturn = (T) stack.get().pop();
+						T toReturn = (T) params.get();
 						return toReturn;
 					}
 					return unscoped.get();
@@ -67,7 +69,7 @@ public class CustomScopeGuiceLearningTest {
 		}
 
 		public void enter(MyParam o) {
-			stack.get().push(o);
+			params.set(o);
 		}
 
 	}
@@ -127,7 +129,22 @@ public class CustomScopeGuiceLearningTest {
 
 	private static class MyImplementation implements MyInterface {
 
-	};
+	}
+
+	private static class MyNestedClass extends MyClass {
+		private MyClass nested;
+
+		@Inject
+		public MyNestedClass(MyInterface field, MyParam myParam, MyFactory factory) {
+			super(field, myParam);
+			nested = factory.create(MyClass.class, new MyParam(2));
+		}
+
+		public MyClass getNested() {
+			return nested;
+		}
+
+	}
 
 	/**
 	 * {@link MyParam} is not bound.
@@ -170,13 +187,10 @@ public class CustomScopeGuiceLearningTest {
 		assertSame(scope1, scope2);
 	}
 
-	/**
-	 * The stack is empty so pop throws a {@link NoSuchElementException}
-	 */
-	@Test(expected = ProvisionException.class)
+	@Test
 	public void testByDefaultMyParamIsNull() {
 		Injector injector = Guice.createInjector(new MyModule());
-		injector.getInstance(MyParam.class);
+		assertNull(injector.getInstance(MyParam.class));
 	}
 
 	@Test
@@ -209,11 +223,7 @@ public class CustomScopeGuiceLearningTest {
 		Injector injector = Guice.createInjector(new MyModule());
 		MyScope scope1 = injector.getInstance(MyScope.class);
 		MyParam p1 = new MyParam();
-		MyParam p2 = new MyParam();
 		scope1.enter(p1);
-		scope1.enter(p2);
-		// note the stack behavior LIFO
-		assertSame(p2, injector.getInstance(MyClass.class).getMyParam());
 		assertSame(p1, injector.getInstance(MyClass.class).getMyParam());
 	}
 
@@ -255,6 +265,16 @@ public class CustomScopeGuiceLearningTest {
 		MyParam p2 = new MyParam();
 		assertSame(p1, factory.create(MyClass.class, p1).getMyParam());
 		assertSame(p2, factory.create(MyOtherClass.class, p2).getMyParam());
+	}
+
+	@Test
+	public void testCanInjectNestedWithMyFactory() {
+		Injector injector = Guice.createInjector(new MyModule());
+		MyFactory factory = injector.getInstance(MyFactory.class);
+		MyParam p1 = new MyParam();
+		MyNestedClass o = factory.create(MyNestedClass.class, p1);
+		assertSame(p1, o.getMyParam());
+		assertEquals(2, o.getNested().getMyParam().i);
 	}
 
 	@Test
