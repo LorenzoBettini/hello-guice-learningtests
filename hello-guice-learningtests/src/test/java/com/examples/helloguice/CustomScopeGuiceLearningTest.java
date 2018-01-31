@@ -10,7 +10,9 @@ import static org.junit.Assert.assertSame;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Test;
 
@@ -34,8 +36,12 @@ public class CustomScopeGuiceLearningTest {
 
 	}
 
+	private static interface InjectableParameter {
+
+	}
+
 	@MyScopedAnnotation
-	private static class MyParam {
+	private static class MyParam implements InjectableParameter {
 		public int i = 0;
 
 		public MyParam() {
@@ -48,28 +54,47 @@ public class CustomScopeGuiceLearningTest {
 
 	}
 
+	@MyScopedAnnotation
+	private static class MyOtherParam implements InjectableParameter {
+		public MyOtherParam() {
+
+		}
+	}
+
 	private static class MyScope implements Scope {
 
 		// Make this a ThreadLocal for multithreading.
-		private final ThreadLocal<MyParam> params = new ThreadLocal<MyParam>();
+		private final ThreadLocal<Map<Key<?>, Object>> params = new ThreadLocal<Map<Key<?>, Object>>() {
+			@Override
+			protected Map<Key<?>, Object> initialValue() {
+				return new HashMap<>();
+			}
+		};
 
 		@Override
 		public <T> Provider<T> scope(final Key<T> key, final Provider<T> unscoped) {
 			return new Provider<T>() {
 				@Override
 				public T get() {
-					if (key.getTypeLiteral().getRawType().equals(MyParam.class)) {
+					Object entered = params.get().get(key);
+					if (entered != null) {
 						@SuppressWarnings("unchecked")
-						T toReturn = (T) params.get();
+						T toReturn = (T) entered;
 						return toReturn;
+					}
+					Class<? super T> rawType = key.getTypeLiteral().getRawType();
+					MyScopedAnnotation annotation = rawType.getAnnotation(MyScopedAnnotation.class);
+					// avoid injecting default values for annotated types
+					if (annotation != null) {
+						return null;
 					}
 					return unscoped.get();
 				}
 			};
 		}
 
-		public void enter(MyParam o) {
-			params.set(o);
+		public void enter(InjectableParameter o) {
+			params.get().put(Key.get(o.getClass()), o);
 		}
 
 	}
@@ -146,6 +171,26 @@ public class CustomScopeGuiceLearningTest {
 
 	}
 
+	private static class MyClassWithSeveralParameters {
+		private MyParam myParam;
+		private MyOtherParam myOtherParam;
+
+		@Inject
+		public MyClassWithSeveralParameters(MyInterface field, MyParam myParam, MyOtherParam myOtherParam) {
+			this.myParam = myParam;
+			this.myOtherParam = myOtherParam;
+		}
+
+		public MyParam getMyParam() {
+			return myParam;
+		}
+
+		public MyOtherParam getMyOtherParam() {
+			return myOtherParam;
+		}
+
+	}
+
 	/**
 	 * {@link MyParam} is not bound.
 	 */
@@ -173,8 +218,10 @@ public class CustomScopeGuiceLearningTest {
 		@Inject
 		private MyScope scope;
 
-		public <T> T create(Class<T> type, MyParam myParam) {
-			scope.enter(myParam);
+		public <T> T create(Class<T> type, InjectableParameter... injectableParameters) {
+			for (InjectableParameter injectableParameter : injectableParameters) {
+				scope.enter(injectableParameter);
+			}
 			return injector.getInstance(type);
 		}
 	}
@@ -291,6 +338,29 @@ public class CustomScopeGuiceLearningTest {
 		MyParam p2 = new MyParam();
 		assertSame(p1, ((MyClassCustom) factory.create(MyClass.class, p1)).getMyParam());
 		assertSame(p2, factory.create(MyOtherClass.class, p2).getMyParam());
+	}
+
+	@Test
+	public void testCanInjectSeveralParametersWithMyFactory() {
+		Injector injector = Guice.createInjector(new MyModule());
+		MyFactory factory = injector.getInstance(MyFactory.class);
+		MyParam p1 = new MyParam();
+		MyOtherParam p2 = new MyOtherParam();
+		MyClassWithSeveralParameters o = factory.create(MyClassWithSeveralParameters.class, p1, p2);
+		assertSame(p1, o.getMyParam());
+		assertSame(p2, o.getMyOtherParam());
+	}
+
+	@Test
+	public void testCanInjectSeveralParametersInAnyOrderWithMyFactory() {
+		Injector injector = Guice.createInjector(new MyModule());
+		MyFactory factory = injector.getInstance(MyFactory.class);
+		MyParam p1 = new MyParam();
+		MyOtherParam p2 = new MyOtherParam();
+		// the order does not need to respect the one in the injected constructor
+		MyClassWithSeveralParameters o = factory.create(MyClassWithSeveralParameters.class, p2, p1);
+		assertSame(p1, o.getMyParam());
+		assertSame(p2, o.getMyOtherParam());
 	}
 
 	@Test
