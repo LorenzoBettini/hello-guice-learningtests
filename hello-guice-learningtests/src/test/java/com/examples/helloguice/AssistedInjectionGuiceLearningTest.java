@@ -7,6 +7,7 @@ import javax.inject.Inject;
 import org.junit.Test;
 
 import com.google.inject.AbstractModule;
+import com.google.inject.CreationException;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.google.inject.assistedinject.Assisted;
@@ -84,6 +85,61 @@ public class AssistedInjectionGuiceLearningTest {
 		assertEquals(MyImplementation.class, a.getField().getClass());
 		assertEquals("a String", a.getaString());
 		assertEquals(1, a.getAnInt());
+	}
+
+	/**
+	 * When binding MyClass it can find bindings for String and Integer
+	 * annotated.
+	 */
+	@Test(expected=CreationException.class)
+	public void testWithBindingForTheImplementationBeforeFactory() {
+		Injector injector = Guice.createInjector(new AbstractModule() {
+			@Override
+			protected void configure() {
+				bind(MyInterface.class).to(MyImplementation.class);
+				bind(MyClassInterface.class).to(MyClass.class);
+				install(new FactoryModuleBuilder()
+					.build(MyClassFactory.class));
+			}
+		});
+		injector.getInstance(MyClassFactory.class);
+	}
+
+	/**
+	 * When binding MyClass it can find bindings for String and Integer
+	 * annotated.
+	 */
+	@Test(expected=CreationException.class)
+	public void testWithBindingForTheImplementationAfterFactory() {
+		Injector injector = Guice.createInjector(new AbstractModule() {
+			@Override
+			protected void configure() {
+				bind(MyInterface.class).to(MyImplementation.class);
+				install(new FactoryModuleBuilder()
+					.build(MyClassFactory.class));
+				bind(MyClassInterface.class).to(MyClass.class);
+			}
+		});
+		injector.getInstance(MyClassFactory.class);
+	}
+
+	/**
+	 * When binding MyClass it can find bindings for String and Integer
+	 * annotated.
+	 */
+	@Test(expected=CreationException.class)
+	public void testWithBindingForTheImplementationAndInFactory() {
+		Injector injector = Guice.createInjector(new AbstractModule() {
+			@Override
+			protected void configure() {
+				bind(MyInterface.class).to(MyImplementation.class);
+				install(new FactoryModuleBuilder()
+					.implement(MyClassInterface.class, MyClass.class)
+					.build(MyClassFactory.class));
+				bind(MyClassInterface.class).to(MyClass.class);
+			}
+		});
+		injector.getInstance(MyClassFactory.class);
 	}
 
 }
