@@ -29,18 +29,30 @@ import com.google.inject.Singleton;
 
 public class CustomScopeGuiceLearningTest {
 
+	/**
+	 * Annotation for parameters that will be injected with our factory.
+	 * 
+	 * @author Lorenzo Bettini
+	 *
+	 */
 	@Target({ TYPE, METHOD })
 	@Retention(RUNTIME)
 	@ScopeAnnotation
-	static @interface MyScopedAnnotation {
+	static @interface FactoryParameterScoped {
 
 	}
 
+	/**
+	 * A parameter that can be injected with our factory.
+	 * 
+	 * @author Lorenzo Bettini
+	 *
+	 */
 	private static interface InjectableParameter {
 
 	}
 
-	@MyScopedAnnotation
+	@FactoryParameterScoped
 	private static class MyParam implements InjectableParameter {
 		public int i = 0;
 
@@ -54,14 +66,14 @@ public class CustomScopeGuiceLearningTest {
 
 	}
 
-	@MyScopedAnnotation
+	@FactoryParameterScoped
 	private static class MyOtherParam implements InjectableParameter {
 		public MyOtherParam() {
 
 		}
 	}
 
-	private static class MyScope implements Scope {
+	private static class FactoryScope implements Scope {
 
 		// Make this a ThreadLocal for multithreading.
 		private final ThreadLocal<Map<Key<?>, Object>> params = new ThreadLocal<Map<Key<?>, Object>>() {
@@ -83,7 +95,7 @@ public class CustomScopeGuiceLearningTest {
 						return toReturn;
 					}
 					Class<? super T> rawType = key.getTypeLiteral().getRawType();
-					MyScopedAnnotation annotation = rawType.getAnnotation(MyScopedAnnotation.class);
+					FactoryParameterScoped annotation = rawType.getAnnotation(FactoryParameterScoped.class);
 					// avoid injecting default values for annotated types
 					if (annotation != null) {
 						return null;
@@ -160,7 +172,7 @@ public class CustomScopeGuiceLearningTest {
 		private MyClass nested;
 
 		@Inject
-		public MyNestedClass(MyInterface field, MyParam myParam, MyFactory factory) {
+		public MyNestedClass(MyInterface field, MyParam myParam, GenericFactory factory) {
 			super(field, myParam);
 			nested = factory.create(MyClass.class, new MyParam(2));
 		}
@@ -198,25 +210,32 @@ public class CustomScopeGuiceLearningTest {
 
 		@Override
 		protected void configure() {
-			MyScope scope = new MyScope();
+			FactoryScope scope = new FactoryScope();
 
 			// tell Guice about the scope
-			bindScope(MyScopedAnnotation.class, scope);
+			bindScope(FactoryParameterScoped.class, scope);
 
 			// make our scope instance injectable
-			bind(MyScope.class).toInstance(scope);
+			bind(FactoryScope.class).toInstance(scope);
 
 			bind(MyInterface.class).to(MyImplementation.class);
 		}
 
 	}
 
-	private static class MyFactory {
+	/**
+	 * A factory that can inject {@link InjectableParameter} annotated with
+	 * {@link FactoryParameterScoped}, using a {@link FactoryScope}.
+	 * 
+	 * @author Lorenzo Bettini
+	 *
+	 */
+	private static class GenericFactory {
 		@Inject
 		private Injector injector;
 
 		@Inject
-		private MyScope scope;
+		private FactoryScope scope;
 
 		public <T> T create(Class<T> type, InjectableParameter... injectableParameters) {
 			for (InjectableParameter injectableParameter : injectableParameters) {
@@ -229,8 +248,8 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testMyScopeIsSingleton() {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyScope scope1 = injector.getInstance(MyScope.class);
-		MyScope scope2 = injector.getInstance(MyScope.class);
+		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
+		FactoryScope scope2 = injector.getInstance(FactoryScope.class);
 		assertSame(scope1, scope2);
 	}
 
@@ -268,7 +287,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testCanInjectTypeThatUsesMyParamEnteringTheScope() {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyScope scope1 = injector.getInstance(MyScope.class);
+		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
 		MyParam p1 = new MyParam();
 		scope1.enter(p1);
 		assertSame(p1, injector.getInstance(MyClass.class).getMyParam());
@@ -277,7 +296,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testTypesShareSingletons() {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyScope scope1 = injector.getInstance(MyScope.class);
+		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
 		MyParam p1 = new MyParam();
 		MyParam p2 = new MyParam();
 		scope1.enter(p1);
@@ -296,7 +315,7 @@ public class CustomScopeGuiceLearningTest {
 				bind(MyClass.class).to(MyClassCustom.class);
 			}
 		});
-		MyScope scope1 = injector.getInstance(MyScope.class);
+		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
 		MyParam p1 = new MyParam();
 		scope1.enter(p1);
 		MyClass o = injector.getInstance(MyClass.class);
@@ -307,7 +326,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testCanInjectWithMyFactory() {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyFactory factory = injector.getInstance(MyFactory.class);
+		GenericFactory factory = injector.getInstance(GenericFactory.class);
 		MyParam p1 = new MyParam();
 		MyParam p2 = new MyParam();
 		assertSame(p1, factory.create(MyClass.class, p1).getMyParam());
@@ -317,7 +336,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testCanInjectNestedWithMyFactory() {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyFactory factory = injector.getInstance(MyFactory.class);
+		GenericFactory factory = injector.getInstance(GenericFactory.class);
 		MyParam p1 = new MyParam();
 		MyNestedClass o = factory.create(MyNestedClass.class, p1);
 		assertSame(p1, o.getMyParam());
@@ -333,7 +352,7 @@ public class CustomScopeGuiceLearningTest {
 				bind(MyClass.class).to(MyClassCustom.class);
 			}
 		});
-		MyFactory factory = injector.getInstance(MyFactory.class);
+		GenericFactory factory = injector.getInstance(GenericFactory.class);
 		MyParam p1 = new MyParam();
 		MyParam p2 = new MyParam();
 		assertSame(p1, ((MyClassCustom) factory.create(MyClass.class, p1)).getMyParam());
@@ -343,7 +362,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testCanInjectSeveralParametersWithMyFactory() {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyFactory factory = injector.getInstance(MyFactory.class);
+		GenericFactory factory = injector.getInstance(GenericFactory.class);
 		MyParam p1 = new MyParam();
 		MyOtherParam p2 = new MyOtherParam();
 		MyClassWithSeveralParameters o = factory.create(MyClassWithSeveralParameters.class, p1, p2);
@@ -354,7 +373,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testCanInjectSeveralParametersInAnyOrderWithMyFactory() {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyFactory factory = injector.getInstance(MyFactory.class);
+		GenericFactory factory = injector.getInstance(GenericFactory.class);
 		MyParam p1 = new MyParam();
 		MyOtherParam p2 = new MyOtherParam();
 		// the order does not need to respect the one in the injected constructor
@@ -366,7 +385,7 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testMultiThreading() throws Exception {
 		Injector injector = Guice.createInjector(new MyModule());
-		MyFactory factory = injector.getInstance(MyFactory.class);
+		GenericFactory factory = injector.getInstance(GenericFactory.class);
 		List<Thread> threads = new ArrayList<>();
 		List<Exception> exceptions = new ArrayList<>();
 		for (int i = 0; i < 10000; ++i) {
