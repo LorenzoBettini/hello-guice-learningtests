@@ -100,19 +100,10 @@ public class CustomScopeGuiceLearningTest {
 			return new Provider<T>() {
 				@Override
 				public T get() {
-					Object entered = parametersStack.get().peek().get(key);
-					if (entered != null) {
-						@SuppressWarnings("unchecked")
-						T toReturn = (T) entered;
-						return toReturn;
-					}
-					Class<? super T> rawType = key.getTypeLiteral().getRawType();
-					FactoryParameterScoped annotation = rawType.getAnnotation(FactoryParameterScoped.class);
-					// avoid injecting default values for annotated types
-					if (annotation != null) {
-						return null;
-					}
-					return unscoped.get();
+					Object param = parametersStack.get().peek().get(key);
+					@SuppressWarnings("unchecked")
+					T toReturn = (T) param;
+					return toReturn;
 				}
 			};
 		}
@@ -168,9 +159,11 @@ public class CustomScopeGuiceLearningTest {
 
 	private static class MyOtherClass {
 		private MyParam myParam;
+		private MyInterface myInterface;
 
 		@Inject
-		public MyOtherClass(MyInterface field, MyParam myParam) {
+		public MyOtherClass(MyInterface myInterface, MyParam myParam) {
+			this.myInterface = myInterface;
 			this.myParam = myParam;
 		}
 
@@ -178,6 +171,9 @@ public class CustomScopeGuiceLearningTest {
 			return myParam;
 		}
 
+		public MyInterface getMyInterface() {
+			return myInterface;
+		}
 	}
 
 	private static interface MyInterface {
@@ -359,8 +355,11 @@ public class CustomScopeGuiceLearningTest {
 		GenericFactory factory = injector.getInstance(GenericFactory.class);
 		MyParam p1 = new MyParam();
 		MyParam p2 = new MyParam();
-		assertSame(p1, factory.create(MyClass.class, p1).getMyParam());
-		assertSame(p2, factory.create(MyOtherClass.class, p2).getMyParam());
+		MyClass o1 = factory.create(MyClass.class, p1);
+		assertSame(p1, o1.getMyParam());
+		MyOtherClass o2 = factory.create(MyOtherClass.class, p2);
+		assertSame(p2, o2.getMyParam());
+		assertSame(MyImplementation.class, o2.getMyInterface().getClass());
 	}
 
 	@Test
