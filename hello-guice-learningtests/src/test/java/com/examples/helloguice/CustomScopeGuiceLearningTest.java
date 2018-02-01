@@ -9,10 +9,10 @@ import static org.junit.Assert.assertSame;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.junit.Test;
 
@@ -75,11 +75,23 @@ public class CustomScopeGuiceLearningTest {
 
 	private static class FactoryScope implements Scope {
 
+		private static class Parameters extends HashMap<Key<?>, Object> {
+
+			private static final long serialVersionUID = 577780233892248717L;
+
+		}
+
+		private static class ParametersStack extends ArrayDeque<Parameters> {
+
+			private static final long serialVersionUID = 1198277842953694531L;
+
+		}
+
 		// Make this a ThreadLocal for multithreading.
-		private final ThreadLocal<Map<Key<?>, Object>> params = new ThreadLocal<Map<Key<?>, Object>>() {
+		private final ThreadLocal<ParametersStack> parametersStack = new ThreadLocal<ParametersStack>() {
 			@Override
-			protected Map<Key<?>, Object> initialValue() {
-				return new HashMap<>();
+			protected ParametersStack initialValue() {
+				return new ParametersStack();
 			}
 		};
 
@@ -88,7 +100,7 @@ public class CustomScopeGuiceLearningTest {
 			return new Provider<T>() {
 				@Override
 				public T get() {
-					Object entered = params.get().get(key);
+					Object entered = parametersStack.get().peek().get(key);
 					if (entered != null) {
 						@SuppressWarnings("unchecked")
 						T toReturn = (T) entered;
@@ -105,8 +117,16 @@ public class CustomScopeGuiceLearningTest {
 			};
 		}
 
-		public void enter(InjectableParameter o) {
-			params.get().put(Key.get(o.getClass()), o);
+		public void enter() {
+			parametersStack.get().push(new Parameters());
+		}
+
+		public void leave() {
+			parametersStack.get().pop();
+		}
+
+		public void addParameter(InjectableParameter o) {
+			parametersStack.get().peek().put(Key.get(o.getClass()), o);
 		}
 
 	}
@@ -238,10 +258,15 @@ public class CustomScopeGuiceLearningTest {
 		private FactoryScope scope;
 
 		public <T> T create(Class<T> type, InjectableParameter... injectableParameters) {
-			for (InjectableParameter injectableParameter : injectableParameters) {
-				scope.enter(injectableParameter);
+			try {
+				scope.enter();
+				for (InjectableParameter injectableParameter : injectableParameters) {
+					scope.addParameter(injectableParameter);
+				}
+				return injector.getInstance(type);
+			} finally {
+				scope.leave();
 			}
-			return injector.getInstance(type);
 		}
 	}
 
@@ -256,6 +281,8 @@ public class CustomScopeGuiceLearningTest {
 	@Test
 	public void testByDefaultMyParamIsNull() {
 		Injector injector = Guice.createInjector(new MyModule());
+		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
+		scope1.enter();
 		assertNull(injector.getInstance(MyParam.class));
 	}
 
@@ -288,8 +315,9 @@ public class CustomScopeGuiceLearningTest {
 	public void testCanInjectTypeThatUsesMyParamEnteringTheScope() {
 		Injector injector = Guice.createInjector(new MyModule());
 		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
+		scope1.enter();
 		MyParam p1 = new MyParam();
-		scope1.enter(p1);
+		scope1.addParameter(p1);
 		assertSame(p1, injector.getInstance(MyClass.class).getMyParam());
 	}
 
@@ -297,10 +325,11 @@ public class CustomScopeGuiceLearningTest {
 	public void testTypesShareSingletons() {
 		Injector injector = Guice.createInjector(new MyModule());
 		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
+		scope1.enter();
 		MyParam p1 = new MyParam();
 		MyParam p2 = new MyParam();
-		scope1.enter(p1);
-		scope1.enter(p2);
+		scope1.addParameter(p1);
+		scope1.addParameter(p2);
 		MySingleton mySingleton = injector.getInstance(MySingleton.class);
 		assertSame(mySingleton, injector.getInstance(MyClass.class).getMySingleton());
 		assertSame(mySingleton, injector.getInstance(MyClass.class).getMySingleton());
@@ -316,8 +345,9 @@ public class CustomScopeGuiceLearningTest {
 			}
 		});
 		FactoryScope scope1 = injector.getInstance(FactoryScope.class);
+		scope1.enter();
 		MyParam p1 = new MyParam();
-		scope1.enter(p1);
+		scope1.addParameter(p1);
 		MyClass o = injector.getInstance(MyClass.class);
 		assertSame(p1, o.getMyParam());
 		assertEquals(MyClassCustom.class, o.getClass());
