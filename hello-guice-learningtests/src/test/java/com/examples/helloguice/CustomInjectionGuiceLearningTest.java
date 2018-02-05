@@ -153,6 +153,7 @@ public class CustomInjectionGuiceLearningTest {
 			public void afterInjection(final I injectee) {
 				for (final Method method : afterInjectMethods) {
 					try {
+						method.setAccessible(true);
 						method.invoke(injectee);
 					} catch (final Exception e) {
 						throw new RuntimeException("@AfterInject " + method, e);
