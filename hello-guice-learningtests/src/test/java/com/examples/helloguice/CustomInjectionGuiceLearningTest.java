@@ -2,15 +2,20 @@ package com.examples.helloguice;
 
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
+import static java.util.Arrays.asList;
 import static org.junit.Assert.assertNotNull;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 import java.lang.reflect.Method;
+import java.util.Collection;
 
 import org.junit.Test;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Collections2;
 import com.google.inject.AbstractModule;
+import com.google.inject.Binder;
 import com.google.inject.Guice;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
@@ -119,25 +124,69 @@ public class CustomInjectionGuiceLearningTest {
 
 	}
 
+	/**
+	 * {@link TypeListener} for {@link AfterInject} annotations.
+	 * 
+	 * @author Lorenzo Bettini
+	 *
+	 */
 	static private class AfterInjectTypeListener implements TypeListener {
 
-		@Override
-		public <I> void hear(TypeLiteral<I> type, TypeEncounter<I> encounter) {
-			encounter.register(new InjectionListener<I>() {
+		/**
+		 * This is notified once-per-instance, so it should run as quickly as possible;
+		 * in our implementation we have previously collected the list of methods
+		 * {@link AfterInject} to call, and this listener is notified only if there are
+		 * such methods in the type of the instance.
+		 * 
+		 * @author Lorenzo Bettini
+		 *
+		 * @param <I>
+		 */
+		private static class AfterInjectInjectionListener<I> implements InjectionListener<I> {
+			private Collection<Method> afterInjectMethods;
 
-				@Override
-				public void afterInjection(final I injectee) {
-					Method[] methods = injectee.getClass().getMethods();
-					for (final Method method : methods) {
-						try {
-							if (method.isAnnotationPresent(AfterInject.class))
-								method.invoke(injectee);
-						} catch (final Exception e) {
-							throw new RuntimeException("@AfterInject " + method, e);
-						}
+			public AfterInjectInjectionListener(Collection<Method> afterInjectMethods) {
+				this.afterInjectMethods = afterInjectMethods;
+			}
+
+			@Override
+			public void afterInjection(final I injectee) {
+				for (final Method method : afterInjectMethods) {
+					try {
+						method.invoke(injectee);
+					} catch (final Exception e) {
+						throw new RuntimeException("@AfterInject " + method, e);
 					}
 				}
-			});
+			}
+		}
+
+		/**
+		 * TypeListeners get notified of the types that Guice injects. Since type
+		 * listeners are only notified once-per-type, so we can run potentially slow
+		 * operations like, in this case, collect all methods annotated with
+		 * {@link AfterInject}; if there's no such methods, we don't even register our
+		 * {@link AfterInjectInjectionListener}.
+		 * 
+		 * @see com.google.inject.spi.TypeListener#hear(com.google.inject.TypeLiteral,
+		 *      com.google.inject.spi.TypeEncounter)
+		 */
+		@Override
+		public <I> void hear(TypeLiteral<I> type, TypeEncounter<I> encounter) {
+			Collection<Method> afterInjectMethods = Collections2.filter(asList(type.getRawType().getMethods()),
+					new Predicate<Method>() {
+						@Override
+						public boolean apply(Method method) {
+							return method.isAnnotationPresent(AfterInject.class);
+						}
+					});
+			if (!afterInjectMethods.isEmpty()) {
+				encounter.register(new AfterInjectInjectionListener<I>(afterInjectMethods));
+			}
+		}
+
+		public static void bindAfterInjectTypeListener(Binder binder) {
+			binder.bindListener(Matchers.any(), new AfterInjectTypeListener());
 		}
 
 	}
@@ -146,7 +195,7 @@ public class CustomInjectionGuiceLearningTest {
 
 		@Override
 		protected void configure() {
-			bindListener(Matchers.any(), new AfterInjectTypeListener());
+			AfterInjectTypeListener.bindAfterInjectTypeListener(binder());
 			bind(MyClass.class).to(MySubclass.class);
 		}
 
@@ -161,7 +210,7 @@ public class CustomInjectionGuiceLearningTest {
 		assertNotNull(o.getFooBar());
 	}
 
-	@Test(expected=ProvisionException.class)
+	@Test(expected = ProvisionException.class)
 	public void testWrongImplementation() {
 		Injector injector = Guice.createInjector(new AfterInjectModule());
 		injector.getInstance(MyWrongSubclass.class);
